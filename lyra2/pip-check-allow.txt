@@ -8,3 +8,7 @@
 ^moge .* has requirement numpy>=2,
 # Wheel tag check quirk (decord ships a manylinux2010 wheel)
 ^decord .* is not supported on this platform
+# ViPE lists opencv-python; opencv-python-headless (from requirements.txt) provides cv2
+^vipe .* requires opencv-python,
+# httpx2 comes with the base image's huggingface_hub; the venv's pins (huggingface-hub 0.35.3, idna 3.10) shadow both
+^httpx2 .* has requirement idna

@@ -1,3 +1,9 @@
 # Added to lyra2/pip-check-allow.txt for this image
 # tensorstore is left out (no Python 3.12 wheel for 0.1.45; unused by Lyra's code)
 ^megatron-core .* requires tensorstore,
+# Packages of the RunPod base image itself (its Jupyter / desktop tooling), not used by Lyra;
+# the venv's pins (platformdirs 4.3.8) shadow what they want
+^pygobject .* requires pycairo,
+^virtualenv .* has requirement platformdirs
+# Wheel tag check quirk with this pip (pip itself installed the manylinux_2_28 wheel on glibc 2.35)
+^transformer_engine_cu12 .* is not supported on this platform
