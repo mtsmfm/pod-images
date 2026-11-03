@@ -7,15 +7,19 @@ set -euo pipefail
 CKPT_ROOT=/workspace/lyra-ckpt
 LYRA_DIR=/opt/lyra/Lyra-2
 
-# 1. Weights (attach a RunPod volume at /workspace to keep them for next time)
+# 1. Weights: checkpoints/* is about 97 GB (attach a RunPod volume at /workspace to keep them for next time)
 if [ ! -d "$CKPT_ROOT/checkpoints/model" ]; then
-  echo "== downloading nvidia/Lyra-2.0 checkpoints to $CKPT_ROOT"
+  echo "== downloading nvidia/Lyra-2.0 checkpoints (~97 GB) to $CKPT_ROOT"
   mkdir -p "$CKPT_ROOT"
+  # Xet keeps its own chunk cache, which would store the weights twice on disk
+  export HF_HUB_DISABLE_XET=1
+  df -h /workspace
   if command -v huggingface-cli >/dev/null 2>&1; then
     huggingface-cli download nvidia/Lyra-2.0 --include "checkpoints/*" --local-dir "$CKPT_ROOT"
   else
     hf download nvidia/Lyra-2.0 --include "checkpoints/*" --local-dir "$CKPT_ROOT"
   fi
+  df -h /workspace
 fi
 
 # 2. Point the repo's checkpoints directory at them

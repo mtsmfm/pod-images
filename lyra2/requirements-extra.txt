@@ -1,0 +1,51 @@
+# Installed (with their own deps) on top of Lyra-2/requirements.txt, constrained by its pins.
+# Lyra's requirements.txt and the vendored packages below are installed with --no-deps,
+# so their runtime deps are listed here explicitly, minus what inference does not use.
+
+# Imported by Depth Anything 3 (depth_anything_3.api) but missing from its pyproject
+addict
+
+# Depth Anything 3 (pyproject deps minus opencv-python, open3d (only bench/), pre-commit, gradio)
+trimesh
+evo
+e3nn
+moviepy
+plyfile
+pillow_heif
+pycolmap
+typer
+uvicorn
+
+# MoGe (minus gradio, flex-gemm, pipeline: only used by the demo app and the v2/v3 sparse models)
+utils3d_moge @ git+https://github.com/EasternJournalist/utils3d-moge.git@62f09d58509485564e24d5d9f6aac9ee9ebc0c37
+
+# ViPE (minus opencv-python; opencv-python-headless comes from requirements.txt)
+rerun-sdk
+python-pycg
+timm
+gdown
+kornia
+viser
+click
+
+# Deps of Lyra-2/requirements.txt entries that --no-deps leaves out (found with `pip check`)
+wcwidth
+starlette
+typing-inspection
+yacs
+anyio
+httpcore
+exceptiongroup
+matplotlib-inline
+wadler-lindig
+docstring-parser
+shtab
+typeguard
+asciitree
+iniconfig
+execnet
+
+# Build backends for the editable installs (requirements.txt lists them, but --no-deps skips their deps)
+hatchling
+hatch-vcs
+editables

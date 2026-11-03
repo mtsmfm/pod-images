@@ -1,0 +1,10 @@
+# `pip check` lines that are expected; anything else fails the build (one extended regex per line).
+# Left out on purpose: not used for inference (training, demo apps, benchmarks), or huge.
+^depth-anything-3 .* requires (open3d|opencv-python|pre-commit|gsplat),
+^moge .* requires (flex-gemm|gradio|pipeline),
+^megatron-core .* requires (flask-restful|nltk|nvidia-modelopt|wandb),
+# Upstream conflict: Lyra-2/requirements.txt and MoGe want numpy>=2, Depth Anything 3 wants numpy<2.
+# Lyra's tested environment ends with numpy 1.26 (DA3 is installed last), so that is what we pin.
+^moge .* has requirement numpy>=2,
+# Wheel tag check quirk (decord ships a manylinux2010 wheel)
+^decord .* is not supported on this platform

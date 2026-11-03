@@ -14,13 +14,13 @@ on:
       - "base/**"
       - "lyra2/**"
       - ".github/workflows/build.yml"
+      - ".github/scripts/**"
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  REGISTRY: ghcr.io
   TAG: cu128
 
 jobs:
@@ -58,9 +58,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v7.4.0
+      # Builder stage: CUDA devel + torch, the FROM of every derived image's builder stage
+      - name: Build and push pod-base-builder
+        uses: docker/build-push-action@v7.4.0
         with:
           context: base
+          target: builder
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/pod-base-builder:${{ env.TAG }}
+            ghcr.io/${{ env.OWNER }}/pod-base-builder:${{ env.TAG }}-${{ github.run_number }}
+          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-base:buildcache
+
+      # Runtime stage: what pods run
+      - name: Build and push pod-base
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: base
+          target: runtime
           platforms: linux/amd64
           push: true
           tags: |
@@ -68,6 +84,9 @@ jobs:
             ghcr.io/${{ env.OWNER }}/pod-base:${{ env.TAG }}-${{ github.run_number }}
           cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-base:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-base:buildcache,mode=max
+
+      - name: Compressed size
+        run: .github/scripts/image-size.sh ghcr.io/$OWNER/pod-base-builder:$TAG ghcr.io/$OWNER/pod-base:$TAG | tee -a "$GITHUB_STEP_SUMMARY"
 
   lyra2:
     needs: [base]
@@ -108,15 +127,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v7.4.0
+      # Only the runtime stage is pushed; the builder stage stays in the cache
+      - name: Build and push pod-lyra2
+        uses: docker/build-push-action@v7.4.0
         with:
           context: lyra2
           platforms: linux/amd64
           push: true
           build-args: |
+            BUILDER=ghcr.io/${{ env.OWNER }}/pod-base-builder:${{ env.TAG }}
             BASE=ghcr.io/${{ env.OWNER }}/pod-base:${{ env.TAG }}
           tags: |
             ghcr.io/${{ env.OWNER }}/pod-lyra2:${{ env.TAG }}
             ghcr.io/${{ env.OWNER }}/pod-lyra2:${{ env.TAG }}-${{ github.run_number }}
           cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2:buildcache
           cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2:buildcache,mode=max
+
+      - name: Compressed size
+        run: .github/scripts/image-size.sh ghcr.io/$OWNER/pod-lyra2:$TAG | tee -a "$GITHUB_STEP_SUMMARY"
