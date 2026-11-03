@@ -30,6 +30,13 @@ and no nvcc and only copies the results over:
 
 The workflow prints each image's compressed size (sum of the amd64 manifest's layers) in the run summary.
 
+| Image | Compressed (2026-11-04) | Before the two-stage builds |
+| --- | --- | --- |
+| pod-base:cu128 | 4.20 GB | 9.99 GB |
+| pod-base-builder:cu128 | 9.83 GB | — |
+| pod-lyra2:cu128 | 5.61 GB (pod-base + 1.4 GB) | 12.05 GB |
+| pod-lyra2-rp:cu128 | 11.90 GB (runpod/pytorch 10.5 GB + 1.4 GB) | — |
+
 ## Usage
 
 ### Building
