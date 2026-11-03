@@ -9,7 +9,7 @@
 #   install.sh vipe        ViPE, with its CUDA extension compiled now
 #   install.sh da3         Depth Anything 3 and gsplat, with gsplat's CUDA extension compiled now
 #   install.sh finish      fail on unexpected `pip check` lines, drop bytecode
-#   install.sh link        (runtime stage) symlink cuda_runtime as cudart for Transformer Engine
+#   install.sh link        (runtime stage) make the base's pip nvidia-* libraries visible from the venv
 #
 # Environment: LYRA_DIR (default /opt/lyra/Lyra-2), REQUIREMENTS_DROP (extended regex of package
 # names to leave out of Lyra's requirements.txt), and the ARGs MOGE_REF / GSPLAT_REF.
@@ -82,8 +82,17 @@ case "${1:?usage: install.sh <step>}" in
     find /opt/venv /opt/lyra -name '*.pyc' -delete
     ;;
   link)
+    # Transformer Engine looks for the pip nvidia-* libraries (cudnn, cublas, cudart, nvrtc, ...) only
+    # under sysconfig's purelib, which is the venv; they live in the base image's site-packages with
+    # torch. Link each of them into the venv's nvidia/, plus cuda_runtime as cudart (INSTALL.md step 5).
     site=$(system_site)
-    if [ ! -e "$site/nvidia/cudart" ]; then ln -s "$site/nvidia/cuda_runtime" "$site/nvidia/cudart"; fi
+    venv_nvidia=$(python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')/nvidia
+    mkdir -p "$venv_nvidia"
+    for d in "$site"/nvidia/*/; do
+      d=${d%/}
+      [ -e "$venv_nvidia/${d##*/}" ] || ln -s "$d" "$venv_nvidia/${d##*/}"
+    done
+    [ -e "$venv_nvidia/cudart" ] || ln -s "$site/nvidia/cuda_runtime" "$venv_nvidia/cudart"
     ;;
   *)
     echo "unknown step: $1" >&2; exit 1 ;;

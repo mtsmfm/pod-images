@@ -39,7 +39,34 @@ OPTIONAL = {
 LOCAL_PACKAGES = ("lyra_2", "depth_anything_3", "vipe", "moge")
 
 
+def stub_triton_driver_without_gpu() -> None:
+    """Let modules that use @triton.autotune at import time (Transformer Engine) import without a GPU.
+
+    triton's Autotuner asks the active driver for a benchmarker when the decorator runs, and there
+    is no active driver without a GPU ("0 active drivers"). Only the import check needs this; the
+    kernels are never run here. Anything else asked of the driver fails loudly.
+    """
+    import torch
+
+    if torch.cuda.is_available():
+        return
+    try:
+        from triton.runtime import driver
+    except ImportError:
+        return
+
+    class NoGpuDriver:
+        def get_benchmarker(self):
+            return lambda *args, **kwargs: [0.0]
+
+        def __getattr__(self, name):
+            raise RuntimeError(f"check_imports: no GPU here (triton driver.{name} was used at import time)")
+
+    driver.set_active(NoGpuDriver())
+
+
 def main() -> int:
+    stub_triton_driver_without_gpu()
     failed = []
     for name in ENTRY_POINTS:
         try:
