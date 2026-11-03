@@ -1,0 +1,3 @@
+# Added to lyra2/pip-check-allow.txt for this image
+# tensorstore is left out (no Python 3.12 wheel for 0.1.45; unused by Lyra's code)
+^megatron-core .* requires tensorstore,

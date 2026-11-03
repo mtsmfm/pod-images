@@ -2,11 +2,12 @@
 # Build with a local Docker:
 #   ./build.sh base  <user>         -> ghcr.io/<user>/pod-base-builder:cu128 and ghcr.io/<user>/pod-base:cu128
 #   ./build.sh lyra2 <user>         -> ghcr.io/<user>/pod-lyra2:cu128 (on top of the two above)
+#   ./build.sh lyra2-rp <user>      -> ghcr.io/<user>/pod-lyra2-rp:cu128 (on runpod/pytorch)
 #   PUSH=1 ./build.sh base <user>   -> also push (docker login ghcr.io first)
 set -euo pipefail
 
-name=${1:?usage: ./build.sh <base|lyra2> <user>}
-user=${2:?usage: ./build.sh <base|lyra2> <user>}
+name=${1:?usage: ./build.sh <base|lyra2|lyra2-rp> <user>}
+user=${2:?usage: ./build.sh <base|lyra2|lyra2-rp> <user>}
 tag=${TAG:-cu128}
 cd "$(dirname "$0")"
 
@@ -22,6 +23,8 @@ build() { # build <image> <docker build args...>
 if [ "$name" = base ]; then
   build pod-base-builder --target builder base
   build pod-base --target runtime base
+elif [ "$name" = lyra2-rp ]; then
+  build pod-lyra2-rp --build-context lyra2=lyra2 lyra2-rp
 else
   build "pod-$name" \
     --build-arg "BUILDER=ghcr.io/$user/pod-base-builder:$tag" \

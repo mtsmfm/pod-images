@@ -8,6 +8,7 @@ This repository holds image definitions only.
 | `ghcr.io/mtsmfm/pod-base:cu128` | General-purpose base: Ubuntu 22.04, Python 3.10, torch 2.7.1 / torchvision 0.22.1 (CUDA 12.8 libraries from the torch wheels), huggingface_hub. No compilers, no nvcc |
 | `ghcr.io/mtsmfm/pod-base-builder:cu128` | The same plus CUDA 12.8.1 devel + cuDNN and compilers. Only used as the builder stage of derived images |
 | `ghcr.io/mtsmfm/pod-lyra2:cu128` | Inference environment for [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) (flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe) on pod-base |
+| `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | Experiment: the same Lyra install on RunPod's `runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204` (Python 3.12). See below |
 
 Each image also gets a pinned tag `cu128-<run_number>` (`:cu128` always points to the latest build; older builds stay reachable by their run tag).
 
@@ -33,11 +34,11 @@ The workflow prints each image's compressed size (sum of the amd64 manifest's la
 
 ### Building
 
-- **Automatic**: a push to `main` that touches `base/**`, `lyra2/**` or `.github/` builds and pushes base (builder and runtime), then lyra2.
-- **Manual**: Actions → `build` → *Run workflow*, and pick `all` / `base` / `lyra2` for `image`. With `lyra2` alone, base is skipped and lyra2 is built on the `pod-base-builder:cu128` / `pod-base:cu128` already on ghcr.io.
+- **Automatic**: a push to `main` that touches `base/**`, `lyra2/**`, `lyra2-rp/**` or `.github/` builds and pushes base (builder and runtime), then lyra2; lyra2-rp builds in parallel.
+- **Manual**: Actions → `build` → *Run workflow*, and pick `all` / `base` / `lyra2` / `lyra2-rp` for `image`. With `lyra2` alone, base is skipped and lyra2 is built on the `pod-base-builder:cu128` / `pod-base:cu128` already on ghcr.io.
 - **Local**: `./build.sh base <user>`, `./build.sh lyra2 <user>` (set `PUSH=1` to push as well). No GPU needed.
 
-After the first push, make each package (pod-base, pod-base-builder, pod-lyra2) **Public** on ghcr.io: *Package settings → Change visibility*. This is separate from the repository's visibility.
+After the first push, make each package (pod-base, pod-base-builder, pod-lyra2, pod-lyra2-rp) **Public** on ghcr.io: *Package settings → Change visibility*. This is separate from the repository's visibility.
 
 ### Running Lyra 2.0
 
@@ -73,6 +74,18 @@ Differences from the upstream install guide:
 - Transformer Engine is pinned to 2.13.0 (upstream installs the latest; newer releases target CUDA 13 / cuDNN >= 9.12)
 - flash-attn uses the official prebuilt 2.8.3.post2 wheel instead of building 2.6.3 from source. If it causes problems, switch to the source-build line in `lyra2/Dockerfile`
 - ViPE is built from the vendored source (as upstream does). A commented-out line switches to `nvidia-vipe` from PyPI (which is also an sdist and compiles)
+
+### pod-lyra2-rp (experiment)
+
+RunPod hosts may already have RunPod's official images, so an image built on one would only pull
+our own layers. Whether that is faster than pulling the slimmer pod-lyra2 is to be measured (pod
+creation to runtime ready, a few times each); if it makes no difference, drop `lyra2-rp/`.
+The base alone is 10.5 GB compressed, and the layers only help when the host has *the same digest*
+(RunPod rebuilds its tags).
+
+- Same install as lyra2 (`lyra2/install.sh`, `requirements-extra.txt`, `check_imports.py`, `start.sh`, via the build context `lyra2`)
+- Conditions for the base, enforced by the first `RUN` for 1 and 2: (1) nvcc and torch's wheel share the CUDA major version, (2) torch 2.7.1, (3) Python 3.10-3.12 with a matching prebuilt flash-attn wheel. The `cu1300` tags pair nvcc 13.0 with a cu128 torch and fail (1)
+- Python 3.12: `tensorstore==0.1.45` has no wheel for it and is left out (Lyra's code does not use it)
 
 ## What RunPod needs
 

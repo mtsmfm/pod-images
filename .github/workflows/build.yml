@@ -6,13 +6,14 @@ on:
       image:
         description: Which image to build
         type: choice
-        options: [all, base, lyra2]
+        options: [all, base, lyra2, lyra2-rp]
         default: all
   push:
     branches: [main]
     paths:
       - "base/**"
       - "lyra2/**"
+      - "lyra2-rp/**"
       - ".github/workflows/build.yml"
       - ".github/scripts/**"
 
@@ -43,7 +44,9 @@ jobs:
           haskell: true
           large-packages: true
           docker-images: true
-          swap-storage: true
+          # Keep swap: compiling the CUDA extensions (ViPE) can run out of the 16 GB of RAM, and the
+          # runner is then shut down without an error pointing here
+          swap-storage: false
 
       - run: df -h /
 
@@ -112,7 +115,9 @@ jobs:
           haskell: true
           large-packages: true
           docker-images: true
-          swap-storage: true
+          # Keep swap: compiling the CUDA extensions (ViPE) can run out of the 16 GB of RAM, and the
+          # runner is then shut down without an error pointing here
+          swap-storage: false
 
       - run: df -h /
 
@@ -145,3 +150,60 @@ jobs:
 
       - name: Compressed size
         run: .github/scripts/image-size.sh ghcr.io/$OWNER/pod-lyra2:$TAG | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Experiment: Lyra on RunPod's PyTorch image (does not use pod-base). Shares lyra2/'s install files.
+  lyra2-rp:
+    if: github.event_name == 'push' || inputs.image == 'all' || inputs.image == 'lyra2-rp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v2.0.0
+        with:
+          preinstalled-runtimes: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          # Keep swap: compiling the CUDA extensions (ViPE) can run out of the 16 GB of RAM, and the
+          # runner is then shut down without an error pointing here
+          swap-storage: false
+
+      # The base alone is 10.5 GB compressed; it is pulled for both stages
+      - run: df -h /
+
+      - name: Lowercase owner
+        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - uses: docker/login-action@v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push pod-lyra2-rp
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: lyra2-rp
+          build-contexts: |
+            lyra2=lyra2
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:${{ env.TAG }}
+            ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:${{ env.TAG }}-${{ github.run_number }}
+          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:buildcache,mode=max
+
+      - run: df -h /
+
+      - name: Compressed size
+        run: .github/scripts/image-size.sh ghcr.io/$OWNER/pod-lyra2-rp:$TAG | tee -a "$GITHUB_STEP_SUMMARY"
