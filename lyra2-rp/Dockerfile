@@ -74,9 +74,9 @@ RUN /opt/pod/install.sh link \
     && chmod +x /opt/start.sh \
     && cd /opt/lyra/Lyra-2 \
     && python /opt/check_imports.py \
-    && python -m lyra_2._src.inference.lyra2_custom_traj_inference --help > /dev/null \
-    && python -m lyra_2._src.inference.lyra2_zoomgs_inference --help > /dev/null \
-    && python -m lyra_2._src.inference.vipe_da3_gs_recon --help > /dev/null \
+    && python /opt/check_imports.py --help-of lyra_2._src.inference.lyra2_custom_traj_inference > /dev/null \
+    && python /opt/check_imports.py --help-of lyra_2._src.inference.lyra2_zoomgs_inference > /dev/null \
+    && python /opt/check_imports.py --help-of lyra_2._src.inference.vipe_da3_gs_recon > /dev/null \
     && find /opt/venv /opt/lyra -name __pycache__ -prune -exec rm -rf {} +
 
 WORKDIR /workspace

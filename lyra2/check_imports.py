@@ -6,12 +6,15 @@
    only fail at run time otherwise).
 3. Fails if any third-party top-level module cannot be found, except the known optional ones.
 
-Usage: python check_imports.py
+Usage:
+  python check_imports.py                    # the import check
+  python check_imports.py --help-of MODULE   # run `python -m MODULE --help` (with the same no-GPU stub)
 """
 import ast
 import importlib
 import importlib.util
 import os
+import runpy
 import sys
 
 ENTRY_POINTS = [
@@ -112,5 +115,19 @@ def main() -> int:
     return 1 if failed else 0
 
 
+def run_help(module: str) -> int:
+    """`python -m MODULE --help` without a GPU: the CLI must get as far as argparse."""
+    stub_triton_driver_without_gpu()
+    sys.argv = [module, "--help"]
+    try:
+        runpy.run_module(module, run_name="__main__", alter_sys=True)
+    except SystemExit as e:  # argparse exits 0 after printing the help
+        return int(e.code or 0)
+    print(f"FAIL {module} --help did not exit")
+    return 1
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--help-of":
+        sys.exit(run_help(sys.argv[2]))
     sys.exit(main())
