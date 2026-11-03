@@ -40,6 +40,7 @@ License: Lyra's code is Apache 2.0; the weights are under NVIDIA's research & de
 Differences from the upstream install guide:
 
 - Installed on top of pod-base (system CUDA 12.8 and Python 3.10) instead of conda
+- Transformer Engine is pinned to 2.13.0 (upstream installs the latest; newer releases target CUDA 13 / cuDNN >= 9.12)
 - flash-attn uses the official prebuilt 2.8.3.post2 wheel instead of building 2.6.3 from source. If it causes problems, switch to the source-build line in `lyra2/Dockerfile`
 - ViPE is built from the vendored source (as upstream does). A commented-out line switches to `nvidia-vipe` from PyPI (which is also an sdist and compiles)
 

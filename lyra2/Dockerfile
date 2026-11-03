@@ -28,7 +28,9 @@ RUN pip install --no-deps -r requirements.txt \
     && pip install "git+https://github.com/microsoft/MoGe.git"
 
 # Transformer Engine (+ symlink cuda_runtime as cudart, as INSTALL.md does)
-RUN pip install --no-build-isolation "transformer_engine[pytorch]" \
+# Pinned to 2.13.0, the latest release when Lyra-2/INSTALL.md was written (2026-04). Later releases
+# depend on transformer_engine_cu13 (2.14+) and need cuDNN >= 9.12 headers (2.20+), newer than this base.
+RUN pip install --no-build-isolation "transformer_engine[pytorch]==2.13.0" \
     && SITE=$(python -c "import site; print(site.getsitepackages()[0])") \
     && if [ ! -e "$SITE/nvidia/cudart" ]; then ln -s "$SITE/nvidia/cuda_runtime" "$SITE/nvidia/cudart"; fi
 
