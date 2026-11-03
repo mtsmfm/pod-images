@@ -45,7 +45,10 @@ RUN USE_SYSTEM_EIGEN=1 pip install --no-build-isolation -e lyra_2/_src/inference
 # RUN pip install --no-build-isolation nvidia-vipe
 
 # Depth Anything 3 (with gsplat)
-RUN pip install --no-build-isolation -e "lyra_2/_src/inference/depth_anything_3[gs]"
+# requirements.txt is installed with --no-deps, so the build backends lack their own deps (pathspec, pluggy, ...);
+# reinstall them with deps first (conda's environment provided these upstream).
+RUN pip install hatchling hatch-vcs editables \
+    && pip install --no-build-isolation -e "lyra_2/_src/inference/depth_anything_3[gs]"
 
 COPY start.sh /opt/start.sh
 RUN chmod +x /opt/start.sh
