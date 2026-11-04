@@ -1,0 +1,8 @@
+# Build tools for the comfy-kitchen source build (its pyproject asks for these with no upper bound).
+# Released at least 7 days before they were pinned (2026-11-04).
+setuptools==84.2.1
+wheel==0.48.0
+nanobind==3.1.0
+cmake==4.4.4
+ninja==1.13.2
+tomli==2.3.2

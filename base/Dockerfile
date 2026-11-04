@@ -1,7 +1,9 @@
 # pod-base: general-purpose base (CUDA 12.8 + Python 3.10 + torch), built in two stages.
-# The torch version is a build argument; CI builds two variants:
-#   pod-base:cu128           torch 2.7.1 / torchvision 0.22.1 (pod-lyra2)
-#   pod-base:cu128-torch280  torch 2.8.0 / torchvision 0.23.0 (pod-comfy, pod-train)
+# CUDA and torch are build arguments; CI builds three variants:
+#   pod-base:cu128           CUDA 12.8, torch 2.7.1 / torchvision 0.22.1 (pod-lyra2)
+#   pod-base:cu128-torch280  CUDA 12.8, torch 2.8.0 / torchvision 0.23.0 (pod-comfy:cu128, pod-train)
+#   pod-base:cu130           CUDA 13.0, torch 2.9.1 / torchvision 0.24.1 (pod-comfy:cu130; needs a
+#                            driver for CUDA 13.0, 580 or later. torch 2.8 has no cu130 build)
 # A derived image uses the builder and runtime of the same variant.
 #
 #   builder  CUDA devel + compilers. Published as pod-base-builder so derived images can
@@ -18,6 +20,8 @@ ARG RUNTIME_IMAGE=nvidia/cuda:12.8.1-base-ubuntu22.04
 FROM ${BUILDER_IMAGE} AS builder
 ARG TORCH=2.7.1
 ARG TORCHVISION=0.22.1
+# PyTorch's wheel index for the CUDA build (cu128, cu130); its +cuXYZ version sorts above PyPI's
+ARG TORCH_INDEX=cu128
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -37,7 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install "torch==${TORCH}" "torchvision==${TORCHVISION}" \
-        --extra-index-url https://download.pytorch.org/whl/cu128 \
+        --extra-index-url "https://download.pytorch.org/whl/${TORCH_INDEX}" \
     && python -m pip install huggingface_hub safetensors numpy pillow \
     && find /usr/local/lib/python3.10/dist-packages -name __pycache__ -prune -exec rm -rf {} + \
     && find /usr/local/lib/python3.10/dist-packages -name '*.pyc' -delete
@@ -70,7 +74,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 RUN gcc --version | head -n 1 \
     && printf '#include <Python.h>\nint main(void) { return 0; }\n' > /tmp/t.c \
     && gcc $(python3.10-config --includes) /tmp/t.c -o /tmp/t && rm -f /tmp/t /tmp/t.c \
-    && python -c "import torch, torchvision; print(torch.__version__, torchvision.__version__)" \
+    && python -c "import torch, torchvision; print(torch.__version__, torchvision.__version__, 'CUDA', torch.version.cuda)" \
     && find /usr/local/lib/python3.10/dist-packages -name __pycache__ -prune -exec rm -rf {} +
 
 WORKDIR /workspace
