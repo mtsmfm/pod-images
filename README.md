@@ -10,15 +10,23 @@ installed; models and weights are never in the image.
 | --- | --- | --- | --- | --- | --- |
 | Base | `ghcr.io/mtsmfm/pod-base:cu128` | 2.7.1 / torchvision 0.22.1 | — | 4.28 GB | — |
 | Base | `ghcr.io/mtsmfm/pod-base:cu128-torch280` | 2.8.0 / torchvision 0.23.0 | — | 4.34 GB | — |
+| Base | `ghcr.io/mtsmfm/pod-base:cu130` | 2.9.1 / torchvision 0.24.1 (CUDA 13.0) | — | TBD | — |
 | Lyra 2.0 inference | `ghcr.io/mtsmfm/pod-lyra2:cu128` | 2.7.1 (`pod-base:cu128`) | [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) `9fffc9a` with flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe | 5.69 GB | Weights (97 GB) in `/workspace/lyra-ckpt`: `/opt/start.sh` downloads them |
-| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) `19ae172` and its requirements, plus the pip dependencies of custom nodes (not their code) | 5.12 GB | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
+| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) `19ae172` and its requirements, plus the pip dependencies of custom nodes (not their code); comfy-kitchen built with CUDA 12.8 | 5.12 GB | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
+| Generation (fast) | `ghcr.io/mtsmfm/pod-comfy:cu130` | 2.9.1 cu130 (`pod-base:cu130`) | The same; comfy-kitchen from PyPI | TBD | The same |
 | Training | `ghcr.io/mtsmfm/pod-train:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ai-toolkit](https://github.com/ostris/ai-toolkit) `0473387` (CLI, no web UI) and [sd-scripts](https://github.com/kohya-ss/sd-scripts) `068bcd7`, in one venv | 5.12 GB | Base models, text encoders and VAEs in `/workspace` |
 | (experiment) | `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | 2.7.1 (`runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204`, Python 3.12) | Same as pod-lyra2. See below | 11.90 GB | Same as pod-lyra2 |
 
 Measured 2026-11-04; the workflow summary has the current numbers.
 
-Builder stages, only used to build derived images: `ghcr.io/mtsmfm/pod-base-builder:cu128` and
-`:cu128-torch280` (the matching pod-base plus CUDA 12.8.1 devel, cuDNN and compilers; 9.83 / 9.90 GB).
+**`cu128` or `cu130`** (the tag names the CUDA the image is built with):
+
+- `cu128` runs on any host whose driver supports CUDA 12.8 (driver 570 or later), which is every RunPod host seen so far.
+- `cu130` is for hosts whose driver supports CUDA 13.0 (580 or later). It is faster: ComfyUI uses comfy-kitchen's CUDA kernels (int8 / nvfp4 matmuls, int8 attention) only with a cu130 torch.
+
+Builder stages, only used to build derived images: `ghcr.io/mtsmfm/pod-base-builder:cu128`,
+`:cu128-torch280` and `:cu130` (the matching pod-base plus CUDA devel, cuDNN and compilers; 9.83 / 9.90 GB
+for cu128).
 
 Each image also gets a pinned tag `<tag>-<run_number>` (`cu128-123`, `cu128-torch280-123`); `:cu128`
 always points to the latest build and older builds stay reachable by their run tag.
@@ -41,8 +49,9 @@ and only copies the results over:
   as pip `nvidia-*` wheels, so `cudnn-runtime` (2.86 GB compressed) would only add a second copy.
   It keeps `gcc`, `libc6-dev` and `python3.10-dev`: triton compiles a small C helper against
   `Python.h` at run time (torch.compile, bitsandbytes, triton kernels). The build checks both.
-- The torch version is a build argument of `base/Dockerfile` (`TORCH`, `TORCHVISION`); the workflow
-  builds the two variants above. A derived image uses the builder and runtime of the same variant.
+- CUDA and torch are build arguments of `base/Dockerfile` (`BUILDER_IMAGE`, `RUNTIME_IMAGE`, `TORCH`,
+  `TORCHVISION`, `TORCH_INDEX`); the workflow builds the three variants above. cu130 uses
+  `nvidia/cuda:13.0.3-*-ubuntu22.04` so that it keeps Python 3.10 like the others. A derived image uses the builder and runtime of the same variant.
 - Derived images install everything they add into the venv `/opt/venv` (`--system-site-packages`, so
   torch comes from the base, pinned with constraints so pip never replaces it) and copy only
   `/opt/venv` and `/opt/<app>` onto pod-base. Their layers are pod-base's plus their own.
@@ -73,7 +82,8 @@ above about 6 GB, RunPod's image extraction gets noticeably slower.
 
 - **Automatic**: a push to `main` that touches an image folder or `.github/` builds pod-base (both variants, builder and runtime), then pod-lyra2, pod-comfy and pod-train; pod-lyra2-rp builds in parallel. Each build is `.github/workflows/image.yml`, called from `build.yml`.
 - **Manual**: Actions → `build` → *Run workflow*, and pick `all` / `base` / `lyra2` / `comfy` / `train` / `lyra2-rp` for `image`. With one derived image alone, base is skipped and the image is built on the pod-base-builder / pod-base already on ghcr.io.
-- **Local**: `./build.sh base <user> [cu128-torch280]`, `./build.sh comfy <user>` and so on (set `PUSH=1` to push as well). No GPU needed.
+- **Pull request**: a PR that touches the same paths builds everything and pushes it only under `:<tag>-pr<number>` (for example `pod-comfy:cu130-pr3`), on the base images of the same PR. The real tags do not change until the merge, whose build reuses the PR's cached layers.
+- **Local**: `./build.sh base <user> [cu128-torch280|cu130]`, `./build.sh comfy <user>` and so on (set `PUSH=1` to push as well). No GPU needed.
 
 After the first push, make each package (pod-base, pod-base-builder, pod-lyra2, pod-comfy, pod-train, pod-lyra2-rp) **Public** on ghcr.io: *Package settings → Change visibility*. This is separate from the repository's visibility.
 
@@ -95,6 +105,16 @@ docker run --gpus all -it -p 8188:8188 -v $PWD/workspace:/workspace ghcr.io/mtsm
 - ComfyUI comes from the GitHub tarball of `COMFY_REF` (no `.git`) at `/opt/ComfyUI` (`COMFY_HOME`).
   Its `requirements.txt` is installed except `torch`, `torchvision` and `torchaudio` (the base's are
   kept; ComfyUI does not import torchaudio)
+- comfy-kitchen (ComfyUI's quantized kernels): its PyPI wheels are built with CUDA 13.0 and link
+  cudart statically, so with them even the cu128 image would need a CUDA 13 driver for int8 attention
+  (`detect_k_anchor kernel launch failed: CUDA driver version is insufficient`). For cu128 it is built
+  from source (the git tag of the version ComfyUI pins, with its submodules) with the image's CUDA 12.8,
+  for `75-real;80-real;86-real;89;90a-real;120` (`COMFY_KITCHEN_CUDA_ARCHS`; upstream's `100f` / `120f`
+  need nvcc 12.9+). Its cuBLASLt-based ops look for cuBLAS 13 only and stay unavailable on cu128
+  (ComfyUI turns comfy-kitchen's CUDA backend off with a cu128 torch anyway). cu130 uses the PyPI wheel
+- The build checks with `comfy/check_cuda.py` that torch is the expected CUDA build, that the
+  comfy-kitchen kernels were built with the same CUDA major version, and that no library in `/opt/venv`
+  was built with a newer CUDA than torch's (it reads nvcc's `release X.Y` from the binaries)
 - `comfy/requirements-extra.txt`: the pip dependencies of custom nodes sent at start (`timm`).
   The nodes' code is not in the image; put it in `custom_nodes/` of the copy
 - Models are not in the image: put them in the copy's `models/` or point `extra_model_paths.yaml` at `/workspace`

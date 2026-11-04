@@ -1,7 +1,9 @@
 name: image
 
 # Builds one image and pushes it to ghcr.io/OWNER/<image>:<tag> and :<tag>-<run number>.
-# Called by build.yml once per image (and per pod-base variant).
+# Called by build.yml once per image (and per variant). For a pull request, only to :<tag>-pr<number>
+# (built on pod-base*:<base_tag>-pr<number>), so a PR can be checked without touching the real tags.
+# All share one registry cache per image, so merging a checked PR reuses its layers.
 on:
   workflow_call:
     inputs:
@@ -65,18 +67,24 @@ jobs:
 
       - run: df -h /
 
-      - name: Lowercase owner, build arguments
+      - name: Owner, tags, build arguments
         env:
+          TAG: ${{ inputs.tag }}
           BASE_TAG: ${{ inputs.base_tag }}
           BUILD_ARGS: ${{ inputs.build_args }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
           owner=${GITHUB_REPOSITORY_OWNER,,}
+          suffix=${PR:+-pr$PR}
           echo "OWNER=$owner" >> "$GITHUB_ENV"
+          echo "TAG=$TAG$suffix" >> "$GITHUB_ENV"
+          # The run-number tag only for real builds
+          if [ -z "$suffix" ]; then echo "RUN_TAG=$TAG-$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"; else echo "RUN_TAG=$TAG$suffix" >> "$GITHUB_ENV"; fi
           {
             echo "BUILD_ARGS<<EOF"
             if [ -n "$BASE_TAG" ]; then
-              echo "BUILDER=ghcr.io/$owner/pod-base-builder:$BASE_TAG"
-              echo "BASE=ghcr.io/$owner/pod-base:$BASE_TAG"
+              echo "BUILDER=ghcr.io/$owner/pod-base-builder:$BASE_TAG$suffix"
+              echo "BASE=ghcr.io/$owner/pod-base:$BASE_TAG$suffix"
             fi
             if [ -n "$BUILD_ARGS" ]; then echo "$BUILD_ARGS"; fi
             echo "EOF"
@@ -101,8 +109,8 @@ jobs:
           push: true
           build-args: ${{ env.BUILD_ARGS }}
           tags: |
-            ghcr.io/${{ env.OWNER }}/${{ inputs.builder_image }}:${{ inputs.tag }}
-            ghcr.io/${{ env.OWNER }}/${{ inputs.builder_image }}:${{ inputs.tag }}-${{ github.run_number }}
+            ghcr.io/${{ env.OWNER }}/${{ inputs.builder_image }}:${{ env.TAG }}
+            ghcr.io/${{ env.OWNER }}/${{ inputs.builder_image }}:${{ env.RUN_TAG }}
           cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }}
 
       # The last stage (runtime): what pods run. The builder stage of a derived image stays in the cache.
@@ -115,8 +123,8 @@ jobs:
           push: true
           build-args: ${{ env.BUILD_ARGS }}
           tags: |
-            ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.tag }}
-            ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.tag }}-${{ github.run_number }}
+            ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ env.TAG }}
+            ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ env.RUN_TAG }}
           cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }}
           cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }},mode=max
 
@@ -127,7 +135,6 @@ jobs:
           SIZE_LIMIT_GB: ${{ inputs.size_limit_gb }}
           BUILDER_IMAGE: ${{ inputs.builder_image }}
           IMAGE: ${{ inputs.image }}
-          TAG: ${{ inputs.tag }}
         run: |
           if [ -n "$BUILDER_IMAGE" ]; then
             SIZE_LIMIT_GB=0 .github/scripts/image-size.sh "ghcr.io/$OWNER/$BUILDER_IMAGE:$TAG"
