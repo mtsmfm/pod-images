@@ -1,0 +1,4 @@
+# pip dependencies of custom nodes that users send at start (the node code itself is not in the image).
+# Nodes whose needs ComfyUI's requirements.txt already covers need nothing here.
+timm==1.0.30  # image tagger nodes
+# Not installed on purpose: rembg, numba, pixeloe, transparent-background (ComfyUI_essentials)

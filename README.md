@@ -3,32 +3,58 @@
 Custom Docker images for RunPod (and local use), built by GitHub Actions and published to ghcr.io.
 This repository holds image definitions only.
 
-| Image | Contents |
-| --- | --- |
-| `ghcr.io/mtsmfm/pod-base:cu128` | General-purpose base: Ubuntu 22.04, Python 3.10, torch 2.7.1 / torchvision 0.22.1 (CUDA 12.8 libraries from the torch wheels), huggingface_hub. No compilers, no nvcc |
-| `ghcr.io/mtsmfm/pod-base-builder:cu128` | The same plus CUDA 12.8.1 devel + cuDNN and compilers. Only used as the builder stage of derived images |
-| `ghcr.io/mtsmfm/pod-lyra2:cu128` | Inference environment for [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) (flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe) on pod-base |
-| `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | Experiment: the same Lyra install on RunPod's `runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204` (Python 3.12). See below |
+Each image is for one purpose. Apps live in `/opt/<app>` at a fixed commit, with every pip dependency
+installed; models and weights are never in the image.
 
-Each image also gets a pinned tag `cu128-<run_number>` (`:cu128` always points to the latest build; older builds stay reachable by their run tag).
+| Purpose | Image | torch (base) | Apps (commit) | Compressed | Needed after start |
+| --- | --- | --- | --- | --- | --- |
+| Base | `ghcr.io/mtsmfm/pod-base:cu128` | 2.7.1 / torchvision 0.22.1 | — | 4.20 GB* | — |
+| Base | `ghcr.io/mtsmfm/pod-base:cu128-torch280` | 2.8.0 / torchvision 0.23.0 | — | TBD | — |
+| Lyra 2.0 inference | `ghcr.io/mtsmfm/pod-lyra2:cu128` | 2.7.1 (`pod-base:cu128`) | [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) `9fffc9a` with flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe | 5.61 GB* | Weights (97 GB) in `/workspace/lyra-ckpt`: `/opt/start.sh` downloads them |
+| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) `19ae172` and its requirements, plus the pip dependencies of custom nodes (not their code) | TBD | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
+| Training | `ghcr.io/mtsmfm/pod-train:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ai-toolkit](https://github.com/ostris/ai-toolkit) `0473387` (CLI, no web UI) and [sd-scripts](https://github.com/kohya-ss/sd-scripts) `068bcd7`, in one venv | TBD | Base models, text encoders and VAEs in `/workspace` |
+| (experiment) | `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | 2.7.1 (`runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204`, Python 3.12) | Same as pod-lyra2. See below | 11.90 GB* | Same as pod-lyra2 |
+
+\* Before the base gained gcc and Python.h (see below); the workflow summary has the current numbers.
+
+Builder stages, only used to build derived images: `ghcr.io/mtsmfm/pod-base-builder:cu128` and
+`:cu128-torch280` (the matching pod-base plus CUDA 12.8.1 devel, cuDNN and compilers; 9.83 GB).
+
+Each image also gets a pinned tag `<tag>-<run_number>` (`cu128-123`, `cu128-torch280-123`); `:cu128`
+always points to the latest build and older builds stay reachable by their run tag.
+
+**Apps in `/opt/<app>` are meant to stay read-only.** For work that writes to the app's directory
+(custom nodes, models, outputs, configs), copy it first, e.g. `rsync -a /opt/ComfyUI/ /workspace/ComfyUI/`
+or `rsync -a /opt/ai-toolkit/ /workspace/ai-toolkit/`, and run it from there. The Python with all the
+dependencies is `/opt/venv/bin/python`, first on `PATH` (`python`, `python3`, `pip`); `/usr/bin/python3`
+has torch only.
 
 ### How the images are built
 
 Every image has two stages. The **builder** stage (CUDA devel, nvcc, compilers) installs the Python
 dependencies and compiles every CUDA extension for `TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0"`
-(A100, A6000/3090, 4090/L40S, H100). The **runtime** stage, the one that is pushed, has no compilers
-and no nvcc and only copies the results over:
+(A100, A6000/3090, 4090/L40S, H100). The **runtime** stage, the one that is pushed, has no nvcc
+and only copies the results over:
 
 - pod-base's runtime starts from `nvidia/cuda:12.8.1-base-ubuntu22.04` (cudart only, 0.1 GB) and gets
   torch's site-packages from the builder. torch brings its own CUDA libraries (cuDNN, cuBLAS, NCCL, ...)
   as pip `nvidia-*` wheels, so `cudnn-runtime` (2.86 GB compressed) would only add a second copy.
-- pod-lyra2 installs everything Lyra adds into the venv `/opt/venv` (`--system-site-packages`, so
-  torch comes from the base) and copies only `/opt/venv` and `/opt/lyra` onto pod-base. Its layers
-  are pod-base's plus Lyra's own.
+  It keeps `gcc`, `libc6-dev` and `python3.10-dev`: triton compiles a small C helper against
+  `Python.h` at run time (torch.compile, bitsandbytes, triton kernels). The build checks both.
+- The torch version is a build argument of `base/Dockerfile` (`TORCH`, `TORCHVISION`); the workflow
+  builds the two variants above. A derived image uses the builder and runtime of the same variant.
+- Derived images install everything they add into the venv `/opt/venv` (`--system-site-packages`, so
+  torch comes from the base, pinned with constraints so pip never replaces it) and copy only
+  `/opt/venv` and `/opt/<app>` onto pod-base. Their layers are pod-base's plus their own.
 - Nothing compiles at run time: gsplat and ViPE would JIT-compile their extension on first import
   when it is missing, and the runtime stage has no nvcc to do it.
+- The last `RUN` of each Dockerfile checks the image on CPU (no GPU in CI) and fails the build
+  otherwise: imports, the apps' CLIs (`--help`, ComfyUI's `--quick-test-for-ci`) and, where it applies,
+  a scan for modules imported anywhere in the app's source that are not installed.
 
-The workflow prints each image's compressed size (sum of the amd64 manifest's layers) in the run summary.
+The workflow writes each image's compressed size (sum of the amd64 manifest's layers) to the run
+summary, with a warning above the target (pod-base 5 GB, pod-lyra2 7 GB, pod-comfy and pod-train 6 GB):
+above about 6 GB, RunPod's image extraction gets noticeably slower.
 
 | Image | Compressed (2026-11-04) | Before the two-stage builds |
 | --- | --- | --- |
@@ -41,11 +67,61 @@ The workflow prints each image's compressed size (sum of the amd64 manifest's la
 
 ### Building
 
-- **Automatic**: a push to `main` that touches `base/**`, `lyra2/**`, `lyra2-rp/**` or `.github/` builds and pushes base (builder and runtime), then lyra2; lyra2-rp builds in parallel.
-- **Manual**: Actions → `build` → *Run workflow*, and pick `all` / `base` / `lyra2` / `lyra2-rp` for `image`. With `lyra2` alone, base is skipped and lyra2 is built on the `pod-base-builder:cu128` / `pod-base:cu128` already on ghcr.io.
-- **Local**: `./build.sh base <user>`, `./build.sh lyra2 <user>` (set `PUSH=1` to push as well). No GPU needed.
+- **Automatic**: a push to `main` that touches an image folder or `.github/` builds pod-base (both variants, builder and runtime), then pod-lyra2, pod-comfy and pod-train; pod-lyra2-rp builds in parallel. Each build is `.github/workflows/image.yml`, called from `build.yml`.
+- **Manual**: Actions → `build` → *Run workflow*, and pick `all` / `base` / `lyra2` / `comfy` / `train` / `lyra2-rp` for `image`. With one derived image alone, base is skipped and the image is built on the pod-base-builder / pod-base already on ghcr.io.
+- **Local**: `./build.sh base <user> [cu128-torch280]`, `./build.sh comfy <user>` and so on (set `PUSH=1` to push as well). No GPU needed.
 
-After the first push, make each package (pod-base, pod-base-builder, pod-lyra2, pod-lyra2-rp) **Public** on ghcr.io: *Package settings → Change visibility*. This is separate from the repository's visibility.
+After the first push, make each package (pod-base, pod-base-builder, pod-lyra2, pod-comfy, pod-train, pod-lyra2-rp) **Public** on ghcr.io: *Package settings → Change visibility*. This is separate from the repository's visibility.
+
+### Updating an app's commit
+
+Each app's commit is an `ARG *_REF` with its default in the Dockerfile: `COMFY_REF` (comfy/),
+`AITK_REF` and `SD_SCRIPTS_REF` (train/), `LYRA_REF`, `MOGE_REF` and `GSPLAT_REF` (lyra2/). Change
+the default and push; the build fails if the new commit's dependencies do not install or import.
+Whatever uses the image (custom nodes, configs, scripts sent at start) should move to the same commit,
+since `:cu128` follows the new build. Pin a `cu128-<run_number>` tag to stay on the old one.
+
+### Generation: pod-comfy
+
+```bash
+docker run --gpus all -it -p 8188:8188 -v $PWD/workspace:/workspace ghcr.io/mtsmfm/pod-comfy:cu128 bash -c '
+  rsync -a /opt/ComfyUI/ /workspace/ComfyUI/ && cd /workspace/ComfyUI && python main.py --listen 0.0.0.0'
+```
+
+- ComfyUI comes from the GitHub tarball of `COMFY_REF` (no `.git`) at `/opt/ComfyUI` (`COMFY_HOME`).
+  Its `requirements.txt` is installed except `torch`, `torchvision` and `torchaudio` (the base's are
+  kept; ComfyUI does not import torchaudio)
+- `comfy/requirements-extra.txt`: the pip dependencies of custom nodes sent at start (`timm`).
+  The nodes' code is not in the image; put it in `custom_nodes/` of the copy
+- Models are not in the image: put them in the copy's `models/` or point `extra_model_paths.yaml` at `/workspace`
+- `libgl1`, `libglib2.0-0` and the `ffmpeg` command (for checking `CreateVideo` / `SaveVideo` output) come with pod-base
+- The build runs `python main.py --cpu --quick-test-for-ci` in a copy, which loads every built-in node
+  (`comfy_extras`, `comfy_api_nodes`) and fails on `IMPORT FAILED`
+
+### Training: pod-train
+
+```bash
+docker run --gpus all -it -v $PWD/workspace:/workspace ghcr.io/mtsmfm/pod-train:cu128 bash -c '
+  rsync -a /opt/ai-toolkit/ /workspace/ai-toolkit/ && cd /workspace/ai-toolkit && python run.py config/my_job.yaml'
+# sd-scripts (Anima LoRA):
+#   cd /opt/sd-scripts && python anima_train_network.py ...   (or a copy in /workspace)
+```
+
+- ai-toolkit (`AITK_HOME=/opt/ai-toolkit`) and sd-scripts (`SD_SCRIPTS_HOME=/opt/sd-scripts`) from
+  their GitHub tarballs, in one venv. ai-toolkit's web UI (`ui/`, Node.js) is removed; `run.py` is the entry point
+- Both `requirements.txt` are installed with torch / torchvision kept at the base's. Where they pin
+  different versions (diffusers, transformers, accelerate, huggingface-hub, safetensors) ai-toolkit's
+  win; sd-scripts' other pins are installed only if they keep ai-toolkit's exact pins. sd-scripts'
+  `-e .` is skipped: its scripts import `library/` from their own directory
+- Built for torch 2.8.0 (ai-toolkit's own installer targets 2.13): `torchaudio==2.8.0` (ai-toolkit
+  imports it) and `torchcodec==0.7.0` instead of ai-toolkit's 0.15.0, which needs torch 2.11+
+- What ai-toolkit's installer adds on Linux + CUDA is included: `flash-linear-attention` and the
+  prebuilt flash-attn 2.8.3.post2 wheel for torch 2.8. NATTEN (no build for torch 2.8) is not
+- The build imports ai-toolkit's main modules, runs `run.py --help` and `anima_train_network.py --help`,
+  and scans both apps' source for imports that are not installed (`train/check_deps.py`); the
+  optional ones (other optimizers and loggers, xformers, captioning tools, ...) are listed in
+  `train/optional-imports.txt`. Training itself needs a GPU and is not run in CI
+- `HF_HOME=/workspace/hf`, so downloaded models land in `/workspace`
 
 ### Running Lyra 2.0
 
@@ -107,15 +183,16 @@ The images contain nothing RunPod-specific.
 
 ## Rules
 
-- **One folder per purpose.** Derived images build in `FROM ${BUILDER} AS builder` and ship `FROM ${BASE} AS runtime`, copying only what they add. To add one, create a folder in the same shape and add a job to the workflow
+- **One folder per purpose.** Derived images build in `FROM ${BUILDER} AS builder` and ship `FROM ${BASE} AS runtime`, copying only what they add. To add one, create a folder in the same shape and add a job to `build.yml`
 - **Build on CPU only** (GitHub's free runners). CUDA extensions are compiled ahead of time in the builder stage with `TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0"` (A100, A6000/3090, 4090/L40S, H100); nothing may JIT-compile at run time
 - **Catch missing dependencies in the build**: import what the image is for (and what those modules import lazily) at the end of the Dockerfile, without a GPU
 - **Never bake in weights or large data.** Download them into `/workspace` after start
-- Tags name the CUDA/torch generation (`cu128`). The run number is appended at push time
+- Tags name the CUDA/torch generation (`cu128`, `cu128-torch280`). The run number is appended at push time
+- **Keep compressed sizes at 6 GB or less** (the summary warns above the target)
 - **Check for leaks** before committing: no names from other projects and no credentials
 
   ```bash
   grep -rn -i --exclude-dir=.git -e '<other project names>' -e 'tok[e]n' -e 'secr[e]t' -e 'api[_]key' .
   ```
 
-  The only expected hits are the two ghcr.io login lines in the workflow (the credential Actions provides automatically). The brackets like `[e]` keep this line from matching itself.
+  The only expected hit is the ghcr.io login line in `.github/workflows/image.yml` (the credential Actions provides automatically). The brackets like `[e]` keep this line from matching itself.

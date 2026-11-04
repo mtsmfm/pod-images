@@ -1,12 +1,14 @@
 name: build
 
+# pod-base (2 torch variants) -> pod-lyra2 (torch 2.7.1) / pod-comfy, pod-train (torch 2.8.0).
+# pod-lyra2-rp builds on RunPod's image and does not wait for pod-base. Each build: image.yml.
 on:
   workflow_dispatch:
     inputs:
       image:
-        description: Which image to build
+        description: Which image to build (the others use their last pushed pod-base)
         type: choice
-        options: [all, base, lyra2, lyra2-rp]
+        options: [all, base, lyra2, comfy, train, lyra2-rp]
         default: all
   push:
     branches: [main]
@@ -14,196 +16,96 @@ on:
       - "base/**"
       - "lyra2/**"
       - "lyra2-rp/**"
-      - ".github/workflows/build.yml"
+      - "comfy/**"
+      - "train/**"
+      - ".github/workflows/*.yml"
       - ".github/scripts/**"
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  TAG: cu128
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   base:
     if: github.event_name == 'push' || inputs.image == 'all' || inputs.image == 'base'
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7.0.1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: cu128
+            cache_tag: buildcache
+            torch: 2.7.1
+            torchvision: 0.22.1
+          - tag: cu128-torch280
+            cache_tag: buildcache-torch280
+            torch: 2.8.0
+            torchvision: 0.23.0
+    uses: ./.github/workflows/image.yml
+    with:
+      image: pod-base
+      builder_image: pod-base-builder
+      context: base
+      tag: ${{ matrix.tag }}
+      cache_tag: ${{ matrix.cache_tag }}
+      build_args: |
+        TORCH=${{ matrix.torch }}
+        TORCHVISION=${{ matrix.torchvision }}
+      size_limit_gb: 5
 
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@v2.0.0
-        with:
-          preinstalled-runtimes: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          # Keep swap: compiling the CUDA extensions (ViPE) can run out of the 16 GB of RAM, and the
-          # runner is then shut down without an error pointing here
-          swap-storage: false
-
-      - run: df -h /
-
-      - name: Lowercase owner
-        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v4.4.1
-
-      - uses: docker/login-action@v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Builder stage: CUDA devel + torch, the FROM of every derived image's builder stage
-      - name: Build and push pod-base-builder
-        uses: docker/build-push-action@v7.4.0
-        with:
-          context: base
-          target: builder
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/${{ env.OWNER }}/pod-base-builder:${{ env.TAG }}
-            ghcr.io/${{ env.OWNER }}/pod-base-builder:${{ env.TAG }}-${{ github.run_number }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-base:buildcache
-
-      # Runtime stage: what pods run
-      - name: Build and push pod-base
-        uses: docker/build-push-action@v7.4.0
-        with:
-          context: base
-          target: runtime
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/${{ env.OWNER }}/pod-base:${{ env.TAG }}
-            ghcr.io/${{ env.OWNER }}/pod-base:${{ env.TAG }}-${{ github.run_number }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-base:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-base:buildcache,mode=max
-
-      - name: Compressed size
-        run: .github/scripts/image-size.sh ghcr.io/$OWNER/pod-base-builder:$TAG ghcr.io/$OWNER/pod-base:$TAG | tee -a "$GITHUB_STEP_SUMMARY"
-
+  # When only one derived image is selected, base is skipped; run anyway in that case
   lyra2:
     needs: [base]
-    # When only lyra2 is selected, base is skipped; run anyway in that case
     if: |
       always() &&
       (needs.base.result == 'success' || needs.base.result == 'skipped') &&
       (github.event_name == 'push' || inputs.image == 'all' || inputs.image == 'lyra2')
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7.0.1
+    uses: ./.github/workflows/image.yml
+    with:
+      image: pod-lyra2
+      context: lyra2
+      tag: cu128
+      base_tag: cu128
+      size_limit_gb: 7
 
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@v2.0.0
-        with:
-          preinstalled-runtimes: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          # Keep swap: compiling the CUDA extensions (ViPE) can run out of the 16 GB of RAM, and the
-          # runner is then shut down without an error pointing here
-          swap-storage: false
+  comfy:
+    needs: [base]
+    if: |
+      always() &&
+      (needs.base.result == 'success' || needs.base.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.image == 'all' || inputs.image == 'comfy')
+    uses: ./.github/workflows/image.yml
+    with:
+      image: pod-comfy
+      context: comfy
+      tag: cu128
+      base_tag: cu128-torch280
+      size_limit_gb: 6
 
-      - run: df -h /
-
-      - name: Lowercase owner
-        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v4.4.1
-
-      - uses: docker/login-action@v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Only the runtime stage is pushed; the builder stage stays in the cache
-      - name: Build and push pod-lyra2
-        uses: docker/build-push-action@v7.4.0
-        with:
-          context: lyra2
-          platforms: linux/amd64
-          push: true
-          build-args: |
-            BUILDER=ghcr.io/${{ env.OWNER }}/pod-base-builder:${{ env.TAG }}
-            BASE=ghcr.io/${{ env.OWNER }}/pod-base:${{ env.TAG }}
-          tags: |
-            ghcr.io/${{ env.OWNER }}/pod-lyra2:${{ env.TAG }}
-            ghcr.io/${{ env.OWNER }}/pod-lyra2:${{ env.TAG }}-${{ github.run_number }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2:buildcache,mode=max
-
-      - name: Compressed size
-        run: .github/scripts/image-size.sh ghcr.io/$OWNER/pod-lyra2:$TAG | tee -a "$GITHUB_STEP_SUMMARY"
+  train:
+    needs: [base]
+    if: |
+      always() &&
+      (needs.base.result == 'success' || needs.base.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.image == 'all' || inputs.image == 'train')
+    uses: ./.github/workflows/image.yml
+    with:
+      image: pod-train
+      context: train
+      tag: cu128
+      base_tag: cu128-torch280
+      size_limit_gb: 6
 
   # Experiment: Lyra on RunPod's PyTorch image (does not use pod-base). Shares lyra2/'s install files.
   lyra2-rp:
     if: github.event_name == 'push' || inputs.image == 'all' || inputs.image == 'lyra2-rp'
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v7.0.1
-
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@v2.0.0
-        with:
-          preinstalled-runtimes: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          # Keep swap: compiling the CUDA extensions (ViPE) can run out of the 16 GB of RAM, and the
-          # runner is then shut down without an error pointing here
-          swap-storage: false
-
-      # The base alone is 10.5 GB compressed; it is pulled for both stages
-      - run: df -h /
-
-      - name: Lowercase owner
-        run: echo "OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
-
-      - uses: docker/setup-buildx-action@v4.4.1
-
-      - uses: docker/login-action@v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push pod-lyra2-rp
-        uses: docker/build-push-action@v7.4.0
-        with:
-          context: lyra2-rp
-          build-contexts: |
-            lyra2=lyra2
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:${{ env.TAG }}
-            ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:${{ env.TAG }}-${{ github.run_number }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/pod-lyra2-rp:buildcache,mode=max
-
-      - run: df -h /
-
-      - name: Compressed size
-        run: .github/scripts/image-size.sh ghcr.io/$OWNER/pod-lyra2-rp:$TAG | tee -a "$GITHUB_STEP_SUMMARY"
+    uses: ./.github/workflows/image.yml
+    with:
+      image: pod-lyra2-rp
+      context: lyra2-rp
+      tag: cu128
+      build_contexts: |
+        lyra2=lyra2

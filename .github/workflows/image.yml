@@ -1,0 +1,135 @@
+name: image
+
+# Builds one image and pushes it to ghcr.io/OWNER/<image>:<tag> and :<tag>-<run number>.
+# Called by build.yml once per image (and per pod-base variant).
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Package name, e.g. pod-comfy
+        type: string
+        required: true
+      context:
+        description: Directory with the Dockerfile
+        type: string
+        required: true
+      tag:
+        description: Tag to push, e.g. cu128 or cu128-torch280
+        type: string
+        required: true
+      base_tag:
+        description: Build on ghcr.io/OWNER/pod-base-builder:<base_tag> and pod-base:<base_tag>
+        type: string
+        default: ""
+      build_args:
+        type: string
+        default: ""
+      build_contexts:
+        type: string
+        default: ""
+      builder_image:
+        description: Also push the Dockerfile's builder stage under this package name
+        type: string
+        default: ""
+      cache_tag:
+        description: Registry cache at ghcr.io/OWNER/<image>:<cache_tag>
+        type: string
+        default: buildcache
+      size_limit_gb:
+        description: Warn (without failing) when the compressed size is above this; 0 for none
+        type: number
+        default: 0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v2.0.0
+        with:
+          preinstalled-runtimes: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          # Keep swap: compiling the CUDA extensions (ViPE) can run out of the 16 GB of RAM, and the
+          # runner is then shut down without an error pointing here
+          swap-storage: false
+
+      - run: df -h /
+
+      - name: Lowercase owner, build arguments
+        env:
+          BASE_TAG: ${{ inputs.base_tag }}
+          BUILD_ARGS: ${{ inputs.build_args }}
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          echo "OWNER=$owner" >> "$GITHUB_ENV"
+          {
+            echo "BUILD_ARGS<<EOF"
+            if [ -n "$BASE_TAG" ]; then
+              echo "BUILDER=ghcr.io/$owner/pod-base-builder:$BASE_TAG"
+              echo "BASE=ghcr.io/$owner/pod-base:$BASE_TAG"
+            fi
+            if [ -n "$BUILD_ARGS" ]; then echo "$BUILD_ARGS"; fi
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - uses: docker/login-action@v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # pod-base only: the builder stage (CUDA devel + torch) is the FROM of every derived builder stage
+      - name: Build and push ${{ inputs.builder_image }}
+        if: inputs.builder_image != ''
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          target: builder
+          platforms: linux/amd64
+          push: true
+          build-args: ${{ env.BUILD_ARGS }}
+          tags: |
+            ghcr.io/${{ env.OWNER }}/${{ inputs.builder_image }}:${{ inputs.tag }}
+            ghcr.io/${{ env.OWNER }}/${{ inputs.builder_image }}:${{ inputs.tag }}-${{ github.run_number }}
+          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }}
+
+      # The last stage (runtime): what pods run. The builder stage of a derived image stays in the cache.
+      - name: Build and push ${{ inputs.image }}
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          build-contexts: ${{ inputs.build_contexts }}
+          platforms: linux/amd64
+          push: true
+          build-args: ${{ env.BUILD_ARGS }}
+          tags: |
+            ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.tag }}
+            ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.tag }}-${{ github.run_number }}
+          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }},mode=max
+
+      - run: df -h /
+
+      - name: Compressed size
+        env:
+          SIZE_LIMIT_GB: ${{ inputs.size_limit_gb }}
+          BUILDER_IMAGE: ${{ inputs.builder_image }}
+          IMAGE: ${{ inputs.image }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$BUILDER_IMAGE" ]; then
+            SIZE_LIMIT_GB=0 .github/scripts/image-size.sh "ghcr.io/$OWNER/$BUILDER_IMAGE:$TAG"
+          fi
+          .github/scripts/image-size.sh "ghcr.io/$OWNER/$IMAGE:$TAG"

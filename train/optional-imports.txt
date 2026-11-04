@@ -1,0 +1,27 @@
+# Modules that ai-toolkit or sd-scripts import but that neither installs by default (check_deps.py skips them).
+# They are behind try/except, a config option or a separate tool script, or are for other hardware.
+# Optimizers and loggers chosen in the config
+dadaptation
+wandb
+# Attention backends tried in turn (flash_attn is installed; FlashAttention 3 is Hopper-only, from source)
+flash_attn_interface
+sageattention
+xformers
+# Other hardware
+torch_xla
+intel_extension_for_pytorch
+apex
+deepspeed
+# Captioning, tagging and preprocessing tools (scripts outside training)
+llava
+easy_dwpose
+onnx
+onnxruntime
+tensorflow
+fairscale
+anime_face_detector
+prompt_toolkit
+# Extra image formats (JPEG XL, AVIF)
+jxlpy
+pillow_jxl
+pillow_avif
