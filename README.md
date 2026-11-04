@@ -8,17 +8,17 @@ installed; models and weights are never in the image.
 
 | Purpose | Image | torch (base) | Apps (commit) | Compressed | Needed after start |
 | --- | --- | --- | --- | --- | --- |
-| Base | `ghcr.io/mtsmfm/pod-base:cu128` | 2.7.1 / torchvision 0.22.1 | — | 4.20 GB* | — |
-| Base | `ghcr.io/mtsmfm/pod-base:cu128-torch280` | 2.8.0 / torchvision 0.23.0 | — | TBD | — |
-| Lyra 2.0 inference | `ghcr.io/mtsmfm/pod-lyra2:cu128` | 2.7.1 (`pod-base:cu128`) | [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) `9fffc9a` with flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe | 5.61 GB* | Weights (97 GB) in `/workspace/lyra-ckpt`: `/opt/start.sh` downloads them |
-| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) `19ae172` and its requirements, plus the pip dependencies of custom nodes (not their code) | TBD | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
-| Training | `ghcr.io/mtsmfm/pod-train:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ai-toolkit](https://github.com/ostris/ai-toolkit) `0473387` (CLI, no web UI) and [sd-scripts](https://github.com/kohya-ss/sd-scripts) `068bcd7`, in one venv | TBD | Base models, text encoders and VAEs in `/workspace` |
-| (experiment) | `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | 2.7.1 (`runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204`, Python 3.12) | Same as pod-lyra2. See below | 11.90 GB* | Same as pod-lyra2 |
+| Base | `ghcr.io/mtsmfm/pod-base:cu128` | 2.7.1 / torchvision 0.22.1 | — | 4.28 GB | — |
+| Base | `ghcr.io/mtsmfm/pod-base:cu128-torch280` | 2.8.0 / torchvision 0.23.0 | — | 4.34 GB | — |
+| Lyra 2.0 inference | `ghcr.io/mtsmfm/pod-lyra2:cu128` | 2.7.1 (`pod-base:cu128`) | [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) `9fffc9a` with flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe | 5.69 GB | Weights (97 GB) in `/workspace/lyra-ckpt`: `/opt/start.sh` downloads them |
+| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) `19ae172` and its requirements, plus the pip dependencies of custom nodes (not their code) | 5.12 GB | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
+| Training | `ghcr.io/mtsmfm/pod-train:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ai-toolkit](https://github.com/ostris/ai-toolkit) `0473387` (CLI, no web UI) and [sd-scripts](https://github.com/kohya-ss/sd-scripts) `068bcd7`, in one venv | 5.12 GB | Base models, text encoders and VAEs in `/workspace` |
+| (experiment) | `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | 2.7.1 (`runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204`, Python 3.12) | Same as pod-lyra2. See below | 11.90 GB | Same as pod-lyra2 |
 
-\* Before the base gained gcc and Python.h (see below); the workflow summary has the current numbers.
+Measured 2026-11-04; the workflow summary has the current numbers.
 
 Builder stages, only used to build derived images: `ghcr.io/mtsmfm/pod-base-builder:cu128` and
-`:cu128-torch280` (the matching pod-base plus CUDA 12.8.1 devel, cuDNN and compilers; 9.83 GB).
+`:cu128-torch280` (the matching pod-base plus CUDA 12.8.1 devel, cuDNN and compilers; 9.83 / 9.90 GB).
 
 Each image also gets a pinned tag `<tag>-<run_number>` (`cu128-123`, `cu128-torch280-123`); `:cu128`
 always points to the latest build and older builds stay reachable by their run tag.
@@ -58,9 +58,13 @@ above about 6 GB, RunPod's image extraction gets noticeably slower.
 
 | Image | Compressed (2026-11-04) | Before the two-stage builds |
 | --- | --- | --- |
-| pod-base:cu128 | 4.20 GB | 9.99 GB |
+| pod-base:cu128 | 4.28 GB (4.20 GB before gcc and Python.h) | 9.99 GB |
+| pod-base:cu128-torch280 | 4.34 GB | — |
 | pod-base-builder:cu128 | 9.83 GB | — |
-| pod-lyra2:cu128 | 5.61 GB (pod-base + 1.4 GB) | 12.05 GB |
+| pod-base-builder:cu128-torch280 | 9.90 GB | — |
+| pod-comfy:cu128 | 5.12 GB (pod-base + 0.78 GB) | — |
+| pod-train:cu128 | 5.12 GB (pod-base + 0.78 GB) | — |
+| pod-lyra2:cu128 | 5.69 GB (pod-base + 1.4 GB) | 12.05 GB |
 | pod-lyra2-rp:cu128 | 11.90 GB (runpod/pytorch 10.5 GB + 1.4 GB) | — |
 
 ## Usage
