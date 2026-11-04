@@ -107,6 +107,10 @@ jobs:
           target: builder
           platforms: linux/amd64
           push: true
+          # No provenance attestation: it records the run, so every push gave pod-base a new digest even
+          # when every layer came from the cache, and the derived images' cache (keyed by the FROM
+          # digest) then missed and rebuilt everything
+          provenance: false
           build-args: ${{ env.BUILD_ARGS }}
           tags: |
             ghcr.io/${{ env.OWNER }}/${{ inputs.builder_image }}:${{ env.TAG }}
@@ -121,6 +125,7 @@ jobs:
           build-contexts: ${{ inputs.build_contexts }}
           platforms: linux/amd64
           push: true
+          provenance: false
           build-args: ${{ env.BUILD_ARGS }}
           tags: |
             ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ env.TAG }}
