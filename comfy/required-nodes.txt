@@ -1,0 +1,16 @@
+# Built-in nodes that pod users rely on; check_nodes.py fails the build when /object_info lacks one
+PH3ImageConditioning
+TextGenerateV2
+TextGenerate
+MiniMaxH3SigmaShift
+MiniMaxH3ReferenceToVideo
+EmptyFlux2LatentImage
+SkipLayerGuidanceDiTSimple
+SAM3_Detect
+UNETLoader
+CLIPLoader
+VAELoader
+SamplerCustomAdvanced
+BasicGuider
+ManualSigmas
+ImageScaleToTotalPixels
