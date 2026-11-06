@@ -12,8 +12,8 @@ installed; models and weights are never in the image.
 | Base | `ghcr.io/mtsmfm/pod-base:cu128-torch280` | 2.8.0 / torchvision 0.23.0 | — | 4.34 GB | — |
 | Base | `ghcr.io/mtsmfm/pod-base:cu130` | 2.9.1 / torchvision 0.24.1 (CUDA 13.0) | — | 3.19 GB | — |
 | Lyra 2.0 inference | `ghcr.io/mtsmfm/pod-lyra2:cu128` | 2.7.1 (`pod-base:cu128`) | [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) `9fffc9a` with flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe | 5.69 GB | Weights (97 GB) in `/workspace/lyra-ckpt`: `/opt/start.sh` downloads them |
-| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) v0.44.0 (`2c75dc1`) and its requirements, plus the pip dependencies of custom nodes (not their code); comfy-kitchen built with CUDA 12.8 | 5.08 GB | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
-| Generation (fast) | `ghcr.io/mtsmfm/pod-comfy:cu130` | 2.9.1 cu130 (`pod-base:cu130`) | The same; comfy-kitchen from PyPI | 3.97 GB | The same |
+| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) v0.44.0 (`2c75dc1`) and its requirements, plus the pip dependencies of custom nodes (not their code); comfy-kitchen built with CUDA 12.8 | 5.11 GB | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
+| Generation (fast) | `ghcr.io/mtsmfm/pod-comfy:cu130` | 2.9.1 cu130 (`pod-base:cu130`) | The same; comfy-kitchen from PyPI | 3.99 GB | The same |
 | Training | `ghcr.io/mtsmfm/pod-train:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ai-toolkit](https://github.com/ostris/ai-toolkit) `0473387` (CLI, no web UI) and [sd-scripts](https://github.com/kohya-ss/sd-scripts) `068bcd7`, in one venv | 5.12 GB | Base models, text encoders and VAEs in `/workspace` |
 | (experiment) | `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | 2.7.1 (`runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204`, Python 3.12) | Same as pod-lyra2. See below | 11.90 GB | Same as pod-lyra2 |
 
@@ -72,8 +72,8 @@ above about 6 GB, RunPod's image extraction gets noticeably slower.
 | pod-base-builder:cu128-torch280 | 9.90 GB | — |
 | pod-base:cu130 | 3.19 GB | — |
 | pod-base-builder:cu130 | 7.17 GB | — |
-| pod-comfy:cu128 | 5.08 GB (pod-base + 0.74 GB) | — |
-| pod-comfy:cu130 | 3.97 GB (pod-base + 0.78 GB) | — |
+| pod-comfy:cu128 | 5.11 GB (pod-base + 0.77 GB, ComfyUI v0.44.0) | — |
+| pod-comfy:cu130 | 3.99 GB (pod-base + 0.80 GB, ComfyUI v0.44.0) | — |
 | pod-train:cu128 | 5.12 GB (pod-base + 0.78 GB) | — |
 | pod-lyra2:cu128 | 5.69 GB (pod-base + 1.4 GB) | 12.05 GB |
 | pod-lyra2-rp:cu128 | 11.90 GB (runpod/pytorch 10.5 GB + 1.4 GB) | — |
