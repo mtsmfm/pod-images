@@ -1,0 +1,10 @@
+# Exceptions to the 7-day cooldown (brief 6): ComfyUI v0.44.0 pins these, and they were uploaded on
+# 2026-11-03, after UPLOADED_PRIOR_TO. They are installed first, with --no-deps and the cutoff
+# EXEMPT_UPLOADED_PRIOR_TO; the rest of the install then keeps them. Comfy-Org's frontend files,
+# workflow examples and node documentation, all pinned with ==. Empty this list once
+# UPLOADED_PRIOR_TO is past 2026-11-03 (from 2026-11-10).
+comfyui-embedded-docs==0.5.16
+comfyui-workflow-templates==0.11.101
+comfyui-workflow-templates-core==0.3.392
+comfyui-workflow-templates-json==0.1.127
+comfyui-workflow-templates-media-assets-02==0.1.27

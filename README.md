@@ -12,7 +12,7 @@ installed; models and weights are never in the image.
 | Base | `ghcr.io/mtsmfm/pod-base:cu128-torch280` | 2.8.0 / torchvision 0.23.0 | — | 4.34 GB | — |
 | Base | `ghcr.io/mtsmfm/pod-base:cu130` | 2.9.1 / torchvision 0.24.1 (CUDA 13.0) | — | 3.19 GB | — |
 | Lyra 2.0 inference | `ghcr.io/mtsmfm/pod-lyra2:cu128` | 2.7.1 (`pod-base:cu128`) | [Lyra 2.0](https://github.com/nv-tlabs/lyra/tree/main/Lyra-2) `9fffc9a` with flash-attn, Transformer Engine, ViPE, Depth Anything 3 + gsplat, MoGe | 5.69 GB | Weights (97 GB) in `/workspace/lyra-ckpt`: `/opt/start.sh` downloads them |
-| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) `19ae172` and its requirements, plus the pip dependencies of custom nodes (not their code); comfy-kitchen built with CUDA 12.8 | 5.08 GB | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
+| Generation | `ghcr.io/mtsmfm/pod-comfy:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ComfyUI](https://github.com/Comfy-Org/ComfyUI) v0.44.0 (`2c75dc1`) and its requirements, plus the pip dependencies of custom nodes (not their code); comfy-kitchen built with CUDA 12.8 | 5.08 GB | Custom nodes and models under `/workspace/ComfyUI` (or `extra_model_paths.yaml`) |
 | Generation (fast) | `ghcr.io/mtsmfm/pod-comfy:cu130` | 2.9.1 cu130 (`pod-base:cu130`) | The same; comfy-kitchen from PyPI | 3.97 GB | The same |
 | Training | `ghcr.io/mtsmfm/pod-train:cu128` | 2.8.0 (`pod-base:cu128-torch280`) | [ai-toolkit](https://github.com/ostris/ai-toolkit) `0473387` (CLI, no web UI) and [sd-scripts](https://github.com/kohya-ss/sd-scripts) `068bcd7`, in one venv | 5.12 GB | Base models, text encoders and VAEs in `/workspace` |
 | (experiment) | `ghcr.io/mtsmfm/pod-lyra2-rp:cu128` | 2.7.1 (`runpod/pytorch:1.6.0-cu1281-torch271-ubuntu2204`, Python 3.12) | Same as pod-lyra2. See below | 11.90 GB | Same as pod-lyra2 |
@@ -106,7 +106,12 @@ docker run --gpus all -it -p 8188:8188 -v $PWD/workspace:/workspace ghcr.io/mtsm
 
 - ComfyUI comes from the GitHub tarball of `COMFY_REF` (no `.git`) at `/opt/ComfyUI` (`COMFY_HOME`).
   Its `requirements.txt` is installed except `torch`, `torchvision` and `torchaudio` (the base's are
-  kept; ComfyUI does not import torchaudio)
+  kept; ComfyUI does not import torchaudio). `COMFY_VERSION` (the runtime stage's ARG) must match
+  `comfyui_version.py` at `COMFY_REF`; the build checks it
+- 7-day cooldown: pip takes only releases uploaded before `UPLOADED_PRIOR_TO` (`--uploaded-prior-to`;
+  set it 7 days before the day you change `COMFY_REF`). `comfy/cooldown-exempt.txt` lists exceptions
+  (pinned packages ComfyUI needs sooner), installed first with `--no-deps` and the cutoff
+  `EXEMPT_UPLOADED_PRIOR_TO`; empty it once `UPLOADED_PRIOR_TO` has passed their upload date
 - comfy-kitchen (ComfyUI's quantized kernels): its PyPI wheels are built with CUDA 13.0 and link
   cudart statically, so with them even the cu128 image would need a CUDA 13 driver for int8 attention
   (`detect_k_anchor kernel launch failed: CUDA driver version is insufficient`). For cu128 it is built
@@ -122,7 +127,8 @@ docker run --gpus all -it -p 8188:8188 -v $PWD/workspace:/workspace ghcr.io/mtsm
 - Models are not in the image: put them in the copy's `models/` or point `extra_model_paths.yaml` at `/workspace`
 - `libgl1`, `libglib2.0-0` and the `ffmpeg` command (for checking `CreateVideo` / `SaveVideo` output) come with pod-base
 - The build runs `python main.py --cpu --quick-test-for-ci` in a copy, which loads every built-in node
-  (`comfy_extras`, `comfy_api_nodes`) and fails on `IMPORT FAILED`
+  (`comfy_extras`, `comfy_api_nodes`) and fails on `IMPORT FAILED`. Then `comfy/check_nodes.py` starts
+  the server on the CPU and fails unless `/object_info` has every node in `comfy/required-nodes.txt`
 
 ### Training: pod-train
 
