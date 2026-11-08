@@ -4,6 +4,8 @@ name: image
 # Called by build.yml once per image (and per variant). For a pull request, only to :<tag>-pr<number>
 # (built on pod-base*:<base_tag>-pr<number>), so a PR can be checked without touching the real tags.
 # All share one registry cache per image, so merging a checked PR reuses its layers.
+# With zstd: true, the same build is also pushed with zstd layers to :<tag>-zstd and :<tag>-zstd-<run
+# number> (:<tag>-zstd-pr<number> for a PR), then checked against the gzip tag and run.
 on:
   workflow_call:
     inputs:
@@ -37,6 +39,17 @@ on:
         description: Registry cache at ghcr.io/OWNER/<image>:<cache_tag>
         type: string
         default: buildcache
+      zstd:
+        description: Also push the image with zstd layers (level 3) to :<tag>-zstd
+        type: boolean
+        default: false
+      zstd_check:
+        description: Script in the context directory run in the pulled zstd image (bash SCRIPT ARGS...)
+        type: string
+        default: ""
+      zstd_check_args:
+        type: string
+        default: ""
       size_limit_gb:
         description: Warn (without failing) when the compressed size is above this; 0 for none
         type: number
@@ -80,6 +93,8 @@ jobs:
           echo "TAG=$TAG$suffix" >> "$GITHUB_ENV"
           # The run-number tag only for real builds
           if [ -z "$suffix" ]; then echo "RUN_TAG=$TAG-$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"; else echo "RUN_TAG=$TAG$suffix" >> "$GITHUB_ENV"; fi
+          echo "ZSTD_TAG=$TAG-zstd$suffix" >> "$GITHUB_ENV"
+          if [ -z "$suffix" ]; then echo "ZSTD_RUN_TAG=$TAG-zstd-$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"; else echo "ZSTD_RUN_TAG=$TAG-zstd$suffix" >> "$GITHUB_ENV"; fi
           {
             echo "BUILD_ARGS<<EOF"
             if [ -n "$BASE_TAG" ]; then
@@ -133,6 +148,20 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }}
           cache-to: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }},mode=max
 
+      # The same build again, every layer from this builder's cache (so the files are the same), written
+      # with zstd. force-compression recompresses the layers from FROM too, which are gzip otherwise.
+      - name: Push ${{ inputs.image }} with zstd layers
+        if: inputs.zstd
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          build-contexts: ${{ inputs.build_contexts }}
+          platforms: linux/amd64
+          provenance: false
+          build-args: ${{ env.BUILD_ARGS }}
+          outputs: type=image,"name=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ env.ZSTD_TAG }},ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ env.ZSTD_RUN_TAG }}",push=true,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true
+          cache-from: type=registry,ref=ghcr.io/${{ env.OWNER }}/${{ inputs.image }}:${{ inputs.cache_tag }}
+
       - run: df -h /
 
       - name: Compressed size
@@ -140,8 +169,25 @@ jobs:
           SIZE_LIMIT_GB: ${{ inputs.size_limit_gb }}
           BUILDER_IMAGE: ${{ inputs.builder_image }}
           IMAGE: ${{ inputs.image }}
+          ZSTD: ${{ inputs.zstd }}
         run: |
           if [ -n "$BUILDER_IMAGE" ]; then
             SIZE_LIMIT_GB=0 .github/scripts/image-size.sh "ghcr.io/$OWNER/$BUILDER_IMAGE:$TAG"
           fi
           .github/scripts/image-size.sh "ghcr.io/$OWNER/$IMAGE:$TAG"
+          if [ "$ZSTD" = true ]; then SIZE_LIMIT_GB=0 .github/scripts/image-size.sh "ghcr.io/$OWNER/$IMAGE:$ZSTD_TAG"; fi
+
+      # Layer types, the same diff_ids as the gzip tag, pull times (2 each), then the checks in the image
+      - name: Check the zstd image
+        if: inputs.zstd
+        env:
+          IMAGE: ${{ inputs.image }}
+          CONTEXT: ${{ inputs.context }}
+          CHECK: ${{ inputs.zstd_check }}
+          CHECK_ARGS: ${{ inputs.zstd_check_args }}
+        run: |
+          .github/scripts/zstd-check.sh "ghcr.io/$OWNER/$IMAGE:$TAG" "ghcr.io/$OWNER/$IMAGE:$ZSTD_TAG" 2
+          if [ -n "$CHECK" ]; then
+            # shellcheck disable=SC2086
+            docker run --rm -v "$PWD/$CONTEXT:/tmp/ctx:ro" "ghcr.io/$OWNER/$IMAGE:$ZSTD_TAG" bash "/tmp/ctx/$CHECK" $CHECK_ARGS
+          fi

@@ -23,6 +23,10 @@ Measured 2026-11-04; the workflow summary has the current numbers.
 
 - `cu128` runs on any host whose driver supports CUDA 12.8 (driver 570 or later), which is every RunPod host seen so far.
 - `cu130` is for hosts whose driver supports CUDA 13.0 (580 or later). It is faster: ComfyUI uses comfy-kitchen's CUDA kernels (int8 / nvfp4 matmuls, int8 attention) only with a cu130 torch.
+- pod-comfy also has `:cu128-zstd` and `:cu130-zstd` (and `-zstd-<run_number>`): the same build with
+  zstd layers (level 3), smaller and faster to unpack. They need Docker 23.0+ / containerd 1.5+ on the
+  host; fall back to the gzip tag where the pull fails. CI checks that every layer is zstd, that the
+  `rootfs.diff_ids` match the gzip tag's, and runs `comfy/check_image.sh` in the pulled zstd image
 
 Builder stages, only used to build derived images: `ghcr.io/mtsmfm/pod-base-builder:cu128`,
 `:cu128-torch280` and `:cu130` (the matching pod-base plus CUDA devel, cuDNN and compilers; 9.83 / 9.90 / 7.17 GB).
