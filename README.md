@@ -78,6 +78,8 @@ above about 6 GB, RunPod's image extraction gets noticeably slower.
 | pod-base-builder:cu130 | 7.17 GB | — |
 | pod-comfy:cu128 | 5.11 GB (pod-base + 0.77 GB, ComfyUI v0.44.0) | — |
 | pod-comfy:cu130 | 3.99 GB (pod-base + 0.80 GB, ComfyUI v0.44.0) | — |
+| pod-comfy:cu128-zstd | 4.44 GB (the same files as :cu128, zstd level 3) | — |
+| pod-comfy:cu130-zstd | 3.69 GB (the same files as :cu130, zstd level 3) | — |
 | pod-train:cu128 | 5.12 GB (pod-base + 0.78 GB) | — |
 | pod-lyra2:cu128 | 5.69 GB (pod-base + 1.4 GB) | 12.05 GB |
 | pod-lyra2-rp:cu128 | 11.90 GB (runpod/pytorch 10.5 GB + 1.4 GB) | — |
