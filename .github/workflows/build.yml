@@ -114,6 +114,10 @@ jobs:
       cache_tag: ${{ matrix.cache_tag }}
       build_args: |
         TORCH_CUDA=${{ matrix.torch_cuda }}
+      # Also :<tag>-zstd (zstd layers, the same files), and brief 6's checks run in the pulled zstd image
+      zstd: true
+      zstd_check: check_image.sh
+      zstd_check_args: ${{ matrix.torch_cuda }}
       size_limit_gb: 6
 
   train:
