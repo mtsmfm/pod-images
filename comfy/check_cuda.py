@@ -6,6 +6,7 @@
 2. comfy-kitchen's kernel library (backends/cuda/_C*.so) says which nvcc built it ("Cuda compilation
    tools, release X.Y"), and X is torch's CUDA major version. comfy-kitchen links cudart statically, so
    a kernel built with CUDA 13 needs a CUDA 13 driver (580+) even when torch is cu128.
+   The extension then loads (a missing driver, libcuda, is let through: CI has no GPU).
 3. No shared library under /opt/venv was built with a CUDA newer than torch's (the same trap elsewhere).
 """
 import importlib.util
@@ -43,6 +44,18 @@ def main():
         if not found or any(a != major for a, b in found):
             print(f"error: the kernel is not built with CUDA {major}.x")
             ok = False
+    if kernels:
+        # Loading needs the CUDA runtime libraries the kernel links (not a GPU); only a missing driver
+        # (libcuda, absent in CI) is let through
+        try:
+            importlib.import_module("comfy_kitchen.backends.cuda._C")
+            print("comfy-kitchen CUDA extension: loaded")
+        except ImportError as e:
+            if "libcuda" in str(e):
+                print(f"comfy-kitchen CUDA extension: needs the driver, not present here ({e})")
+            else:
+                print(f"error: the comfy-kitchen CUDA extension does not load: {e}")
+                ok = False
 
     newer = []
     count = 0

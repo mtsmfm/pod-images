@@ -21,13 +21,13 @@ ARG BASE=pod-base:cu128-torch280
 FROM ${BUILDER} AS builder
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Users of the image assume this commit (v0.44.0); change it together with COMFY_VERSION below
-ARG COMFY_REF=2c75dc1b379a59e0880619d029607af5169a62ef
+# Users of the image assume this commit (v0.45.0); change it together with COMFY_VERSION below
+ARG COMFY_REF=989d93d0d968e704c589ce0146bb18c77f6b50cc
 # 7-day cooldown for what ComfyUI's requirements leave unpinned: pip only takes releases uploaded
 # before this (7 days before COMFY_REF was last changed). cooldown-exempt.txt lists the exceptions,
 # taken with the cutoff EXEMPT_UPLOADED_PRIOR_TO.
-ARG UPLOADED_PRIOR_TO=2026-10-30T00:00:00Z
-ARG EXEMPT_UPLOADED_PRIOR_TO=2026-11-04T00:00:00Z
+ARG UPLOADED_PRIOR_TO=2026-11-05T00:00:00Z
+ARG EXEMPT_UPLOADED_PRIOR_TO=2026-11-11T00:00:00Z
 # comfy-kitchen source build (CUDA 12 only). The default architectures add 100f / 120f, which need
 # nvcc 12.9+; 120 covers the RTX 5090 / PRO 6000, and 86-real the 3090 / A6000 / A40
 ARG COMFY_KITCHEN_CUDA_ARCHS="75-real;80-real;86-real;89;90a-real;120"
@@ -86,7 +86,7 @@ ENV VIRTUAL_ENV=/opt/venv \
 
 # torch's CUDA version (12.8 or 13.0) and ComfyUI's version (COMFY_REF's), checked below
 ARG TORCH_CUDA=12.8
-ARG COMFY_VERSION=0.44.0
+ARG COMFY_VERSION=0.45.0
 
 # CPU-only checks (no GPU and no nvcc here): triton's compiler needs are present, torch is the expected
 # CUDA build and no CUDA code needs a newer driver than it (check_cuda.py), the dependencies import,
