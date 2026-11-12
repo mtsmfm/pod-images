@@ -1,10 +1,13 @@
-# Exceptions to the 7-day cooldown (brief 6): ComfyUI v0.44.0 pins these, and they were uploaded on
-# 2026-11-03, after UPLOADED_PRIOR_TO. They are installed first, with --no-deps and the cutoff
-# EXEMPT_UPLOADED_PRIOR_TO; the rest of the install then keeps them. Comfy-Org's frontend files,
-# workflow examples and node documentation, all pinned with ==. Empty this list once
-# UPLOADED_PRIOR_TO is past 2026-11-03 (from 2026-11-10).
-comfyui-embedded-docs==0.5.16
-comfyui-workflow-templates==0.11.101
-comfyui-workflow-templates-core==0.3.392
-comfyui-workflow-templates-json==0.1.127
-comfyui-workflow-templates-media-assets-02==0.1.27
+# Exceptions to the 7-day cooldown (brief 8): ComfyUI v0.45.0 pins these, and they were uploaded after
+# UPLOADED_PRIOR_TO (2026-11-05). They are installed first, with --no-deps and the cutoff
+# EXEMPT_UPLOADED_PRIOR_TO; the rest of the install then keeps them. All pinned with ==.
+# Empty this list once UPLOADED_PRIOR_TO is past their upload dates (from 2026-11-17).
+#   comfy-kitchen 0.2.41: 2026-11-05 01:44 UTC (cu130 takes this wheel; cu128 has its own build of
+#     the v0.2.41 git tag installed already, which pip keeps)
+#   comfyui-workflow-templates 0.11.105 and -core 0.3.396, -json 0.1.131: 2026-11-10 15:02 UTC
+#   comfyui-workflow-templates-media-assets-02 0.1.30: 2026-11-10 14:26 UTC
+comfy-kitchen==0.2.41
+comfyui-workflow-templates==0.11.105
+comfyui-workflow-templates-core==0.3.396
+comfyui-workflow-templates-json==0.1.131
+comfyui-workflow-templates-media-assets-02==0.1.30

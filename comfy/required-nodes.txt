@@ -14,3 +14,14 @@ SamplerCustomAdvanced
 BasicGuider
 ManualSigmas
 ImageScaleToTotalPixels
+# MiniMax-H3-Image edit template (templates/image_minimax_h3_image_edit.json, v0.45.0)
+MiniMaxH3ImageConditioning
+KSampler
+JsonExtractString
+StringReplace
+ComfySwitchNode
+ResizeImageMaskNode
+PrimitiveStringMultiline
+PrimitiveBoolean
+LoadImage
+SaveImage
